@@ -5,8 +5,6 @@ import time
 import requests
 import fitz  # PyMuPDF
 import docx2txt
-from PIL import Image
-import pytesseract
 
 st.set_page_config(page_title="Doc Classifier App", layout="wide")
 
@@ -16,12 +14,31 @@ st.markdown("<p style='color: gray;'>Upload or enter customs-related documents f
 # === Load Model & Vectorizer ===
 try:
     vectorizer = load('vectorizer.pkl')
-    logreg_model = load('logreg_model.pkl')  # ✅ Using only Logistic Regression
+    logreg_model = load('logreg_model.pkl')
 except Exception as e:
     st.error(f"❌ Error loading model/vectorizer: {e}")
     st.stop()
 
-# === LibreTranslate API
+# === OCR.space API Integration ===
+def ocr_space_api(file, api_key="K86910467788957", language="eng"):
+    url = "https://api.ocr.space/parse/image"
+    payload = {
+        'isOverlayRequired': False,
+        'apikey': api_key,
+        'language': language,
+    }
+    files = {'file': file}
+    response = requests.post(url, files=files, data=payload)
+
+    if response.status_code == 200:
+        result = response.json()
+        if result.get("IsErroredOnProcessing"):
+            return "⚠️ OCR API Error: " + result.get("ErrorMessage", ["Unknown error"])[0]
+        return result["ParsedResults"][0]["ParsedText"]
+    else:
+        return "⚠️ Failed to connect to OCR API."
+
+# === LibreTranslate API ===
 def libre_translate(text, target_lang):
     url = "https://libretranslate.de/translate"
     payload = {"q": text, "source": "auto", "target": target_lang, "format": "text"}
@@ -30,7 +47,7 @@ def libre_translate(text, target_lang):
         return response.json()["translatedText"]
     return "⚠️ Translation failed."
 
-# === Text Extraction Function
+# === Text Extraction Function ===
 def extract_text_from_file(uploaded_file):
     file_type = uploaded_file.type
     if file_type == "application/pdf":
@@ -39,8 +56,7 @@ def extract_text_from_file(uploaded_file):
     elif file_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
         return docx2txt.process(uploaded_file)
     elif file_type.startswith("image/"):
-        img = Image.open(uploaded_file)
-        return pytesseract.image_to_string(img)
+        return ocr_space_api(uploaded_file)
     return ""
 
 # === Tabs ===
@@ -112,5 +128,5 @@ with tab3:
     - 🌐 Translate extracted text using LibreTranslate
     - 📥 Download translation as a CSV report
 
-    Built with ❤️ using **Streamlit**, **scikit-learn**, and **LibreTranslate**.
+    Built with ❤️ using **Streamlit**, **scikit-learn**, and **OCR.space**.
     """)
